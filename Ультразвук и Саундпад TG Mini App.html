@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>УльтраЗвук & Саундпад — TG Mini App</title>
+    <!-- Telegram Mini App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        tgBg: '#0f111a',
+                        tgCard: '#181b28',
+                        tgAccent: '#00f2fe',
+                        tgDanger: '#ff2a5f',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        body {
+            background-color: #0b0d14;
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+        /* Стилизация ползунка частоты */
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 10px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #3b82f6 0%, #a855f7 50%, #ec4899 80%, #ef4444 100%);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 26px;
+            width: 26px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 3px solid #ec4899;
+            box-shadow: 0 0 15px rgba(236, 72, 153, 0.8);
+            margin-top: -8px;
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:active {
+            transform: scale(1.2);
+        }
+        /* Эффект активной кнопки саундпада */
+        .pad-active {
+            animation: pulseGlow 0.9s infinite alternate;
+            border-color: #ec4899 !important;
+            background: linear-gradient(135deg, rgba(236,72,153,0.25), rgba(168,85,247,0.25)) !important;
+        }
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 8px rgba(236, 72, 153, 0.4), inset 0 0 8px rgba(236, 72, 153, 0.2); }
+            100% { box-shadow: 0 0 22px rgba(236, 72, 153, 0.85), inset 0 0 15px rgba(236, 72, 153, 0.4); }
+        }
+        .cyber-grid {
+            background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+
+<body class="cyber-grid min-h-screen pb-28 font-sans antialiased selection:bg-pink-500 selection:text-white">
+
+    <!-- Верхняя панель навигации и статуса -->
+    <header class="sticky top-0 z-30 backdrop-blur-xl bg-[#0b0d14]/85 border-b border-white/10 px-4 py-3">
+        <div class="max-w-md mx-auto flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/30">
+                    <i class="fa-solid fa-wave-square text-white text-sm"></i>
+                </div>
+                <div>
+                    <h1 class="text-base font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-pink-200 to-pink-400">
+                        SONIC PRANK PRO
+                    </h1>
+                    <p id="statusSubtitle" class="text-[11px] text-slate-400 flex items-center gap-1.5">
+                        <span id="liveDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <span>Готов к запуску</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Громкость и кнопка паники СТОП -->
+            <div class="flex items-center gap-2">
+                <button id="stopAllBtn" onclick="stopAllSounds()" class="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 active:scale-95 border border-rose-500/40 text-rose-400 font-bold text-xs flex items-center gap-1.5 transition-all">
+                    <i class="fa-solid fa-stop"></i>
+                    <span>СТОП ВСЁ</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto px-4 pt-4 space-y-5">
+
+        <!-- Осциллограф в реальном времени -->
+        <section class="relative rounded-2xl bg-[#131724] border border-white/10 p-3 shadow-xl overflow-hidden">
+            <div class="flex items-center justify-between text-xs text-slate-400 mb-2 px-1">
+                <span class="font-mono uppercase tracking-wider text-[10px] text-cyan-400 flex items-center gap-1.5">
+                    <i class="fa-solid fa-satellite-dish animate-pulse"></i> Осциллограф (Live)
+                </span>
+                <div class="flex items-center gap-3 font-mono text-[11px]">
+                    <span id="activeVoicesBadge" class="text-pink-400">Активно: 0</span>
+                    <span id="currentFreqBadge" class="bg-white/5 px-2 py-0.5 rounded-md text-white">0 Гц</span>
+                </div>
+            </div>
+            <div class="relative h-24 w-full rounded-xl bg-[#090b11] border border-white/5 overflow-hidden">
+                <canvas id="visualizerCanvas" class="w-full h-full block"></canvas>
+                <!-- Сетка поверх осциллографа -->
+                <div class="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:16px_16px]"></div>
+            </div>
+            <!-- Регулятор общей громкости -->
+            <div class="mt-3 flex items-center gap-3 px-1">
+                <i class="fa-solid fa-volume-low text-slate-400 text-xs"></i>
+                <input id="masterVolume" type="range" min="0" max="100" value="85" class="w-full h-1.5">
+                <span id="volumeLabel" class="font-mono text-xs text-slate-300 w-9 text-right">85%</span>
+            </div>
+        </section>
+
+        <!-- БЛОК 1: ГЕНЕРАТОР УЛЬТРАЗВУКА И ЧАСТОТ -->
+        <section class="rounded-2xl bg-gradient-to-b from-[#181c2e] to-[#121522] border border-pink-500/25 p-4 shadow-xl space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-dog text-pink-400"></i>
+                        Генератор Ультразвука
+                    </h2>
+                    <p class="text-[11px] text-slate-400">Тонкая настройка от 100 Гц до 22 000 Гц</p>
+                </div>
+                <button id="ultraToggleBtn" onclick="toggleUltrasound()" class="px-4 py-2 rounded-xl font-bold text-xs bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg shadow-pink-500/25 active:scale-95 transition-all flex items-center gap-2">
+                    <i id="ultraBtnIcon" class="fa-solid fa-play"></i>
+                    <span id="ultraBtnText">ВКЛЮЧИТЬ</span>
+                </button>
+            </div>
+
+            <!-- Дисплей частоты и кнопки точной подстройки -->
+            <div class="bg-[#0b0d14] rounded-xl p-3 border border-white/5 flex items-center justify-between">
+                <button onclick="adjustFreq(-100)" class="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 active:scale-90 text-slate-300 font-mono text-xs font-bold">-100</button>
+                <div class="text-center">
+                    <div class="font-mono text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-pink-400 to-rose-400">
+                        <span id="freqDisplayValue">17400</span> <span class="text-sm font-normal text-slate-400">Гц</span>
+                    </div>
+                    <div id="freqCategoryLabel" class="text-[11px] text-pink-400 font-medium mt-0.5">
+                        Слышат только подростки (до 20 лет)
+                    </div>
+                </div>
+                <button onclick="adjustFreq(100)" class="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 active:scale-90 text-slate-300 font-mono text-xs font-bold">+100</button>
+            </div>
+
+            <!-- Ползунок частоты -->
+            <div class="space-y-1.5">
+                <input id="freqSlider" type="range" min="100" max="22000" step="10" value="17400" class="w-full">
+                <div class="flex justify-between text-[10px] font-mono text-slate-500">
+                    <span>100 Гц</span>
+                    <span>8 кГц</span>
+                    <span>15 кГц</span>
+                    <span>22 кГц (Ультра)</span>
+                </div>
+            </div>
+
+            <!-- Быстрые пресеты частот -->
+            <div>
+                <span class="text-[11px] text-slate-400 block mb-2">Быстрые пресеты частот:</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setPresetFreq(8000, 'sine')" class="p-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 text-left transition">
+                        <div class="font-mono text-xs font-bold text-cyan-400">8 000 Гц</div>
+                        <div class="text-[10px] text-slate-400">Звон в ушах (Слышат все)</div>
+                    </button>
+                    <button onclick="setPresetFreq(14500, 'sine')" class="p-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 text-left transition">
+                        <div class="font-mono text-xs font-bold text-purple-400">14 500 Гц</div>
+                        <div class="text-[10px] text-slate-400">Анти-возраст (до 35 лет)</div>
+                    </button>
+                    <button onclick="setPresetFreq(17400, 'sawtooth')" class="p-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 text-left transition">
+                        <div class="font-mono text-xs font-bold text-pink-400">17 400 Гц</div>
+                        <div class="text-[10px] text-slate-400">Школьный стелс (до 20 лет)</div>
+                    </button>
+                    <button onclick="setPresetFreq(20000, 'square')" class="p-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 text-left transition">
+                        <div class="font-mono text-xs font-bold text-rose-400">20 000 Гц</div>
+                        <div class="text-[10px] text-slate-400">Ультразвук / Отпугиватель</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Выбор формы волны -->
+            <div class="flex items-center justify-between gap-1.5 pt-1">
+                <span class="text-[11px] text-slate-400">Волна:</span>
+                <div class="grid grid-cols-4 gap-1.5 flex-1 max-w-[260px]">
+                    <button onclick="setWaveType('sine')" id="wave-sine" class="wave-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-pink-500/20 border border-pink-500 text-pink-300">Синус</button>
+                    <button onclick="setWaveType('sawtooth')" id="wave-sawtooth" class="wave-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-white/5 border border-white/10 text-slate-400">Пила</button>
+                    <button onclick="setWaveType('square')" id="wave-square" class="wave-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-white/5 border border-white/10 text-slate-400">Квадрат</button>
+                    <button onclick="setWaveType('triangle')" id="wave-triangle" class="wave-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-white/5 border border-white/10 text-slate-400">Треуг.</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- БЛОК 2: РЕЖИМЫ И СКРЫТЫЙ ТАЙМЕР ПРАНКА -->
+        <section class="rounded-2xl bg-[#151826] border border-white/10 p-3.5 flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+                <!-- Переключатель зацикливания -->
+                <div class="flex items-center gap-2.5">
+                    <button id="loopModeBtn" onclick="toggleLoopMode()" class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold flex items-center gap-2 transition-all">
+                        <i class="fa-solid fa-repeat text-cyan-400"></i>
+                        <span>Зацикливать: <strong id="loopStateText">ВЫКЛ</strong></span>
+                    </button>
+                </div>
+
+                <!-- Таймер отложенного запуска (Стелс-пранк) -->
+                <div class="flex items-center gap-1.5">
+                    <select id="prankSoundSelect" class="bg-[#0b0d14] text-slate-200 text-xs rounded-xl px-2.5 py-2 border border-white/10 focus:outline-none">
+                        <option value="mosquito">🦟 Комар</option>
+                        <option value="ultrasound">🔊 17.4 кГц</option>
+                        <option value="smoke">🔋 Детектор дыма</option>
+                        <option value="chalk">🖍️ Мел по доске</option>
+                        <option value="siren">🚨 Сирена</option>
+                    </select>
+                    <button id="timerBtn" onclick="startStealthTimer()" class="px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition">
+                        <i class="fa-solid fa-clock"></i>
+                        <span id="timerBtnText">Таймер 5с</span>
+                    </button>
+                </div>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-tight">
+                💡 <strong>Совет:</strong> Включи «Зацикливать», чтобы запускать несколько звуков одновременно, или нажми «Таймер 5с» и спрячь телефон.
+            </p>
+        </section>
+
+        <!-- БЛОК 3: САУНДПАД РАЗДРАЖАЮЩИХ ЗВУКОВ (12 ВСТРОЕННЫХ + СВОИ) -->
+        <section class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-volume-high text-cyan-400"></i>
+                    Саундпад раздражающих звуков
+                </h2>
+                <span id="padCountBadge" class="text-[11px] font-mono text-slate-400">12 звуков</span>
+            </div>
+
+            <!-- Сетка кнопок -->
+            <div id="soundpadGrid" class="grid grid-cols-3 gap-2.5">
+                <!-- Генерируется через JS -->
+            </div>
+        </section>
+
+        <!-- БЛОК 4: ЗАГРУЗКА СВОИХ ЗВУКОВ С ТЕЛЕФОНА / ПК -->
+        <section class="rounded-2xl bg-[#151826]/90 border border-dashed border-cyan-500/40 p-4 text-center space-y-2.5">
+            <div class="w-10 h-10 rounded-full bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+            </div>
+            <div>
+                <h3 class="text-xs font-bold text-white">Хочешь добавить свои MP3 / WAV звуки?</h3>
+                <p class="text-[11px] text-slate-400 mt-0.5">
+                    Выбери любые аудиофайлы со своего устройства — они сразу появятся новыми кнопками в саундпаде выше!
+                </p>
+            </div>
+            <div>
+                <input id="customAudioInput" type="file" accept="audio/*" multiple class="hidden" onchange="handleCustomFiles(event)">
+                <button onclick="document.getElementById('customAudioInput').click()" class="px-4 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-300 font-bold text-xs inline-flex items-center gap-2 active:scale-95 transition">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Загрузить свои звуки (.mp3, .wav, .ogg)</span>
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Уведомление тост внизу экрана -->
+    <div id="toastBanner" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 translate-y-4 transition-all duration-300 max-w-xs w-full px-4">
+        <div class="bg-[#1e2235] border border-pink-500/50 text-white px-4 py-2.5 rounded-xl shadow-2xl text-xs font-medium flex items-center justify-center gap-2 text-center">
+            <i class="fa-solid fa-bolt text-pink-400"></i>
+            <span id="toastText">Звук активирован</span>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. ИНИЦИАЛИЗАЦИЯ TELEGRAM MINI APP SDK
+        // ==========================================
+        const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+        if (tg) {
+            tg.ready();
+            tg.expand();
+            try {
+                tg.setHeaderColor('#0b0d14');
+                tg.setBackgroundColor('#0b0d14');
+            } catch (e) {
+                // Игнорируем для старых версий клиента
+            }
+        }
+
+        function triggerHaptic(type = 'light') {
+            if (tg && tg.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred(type);
+            } else if (navigator.vibrate) {
+                navigator.vibrate(25);
+            }
+        }
+
+        function showToast(message) {
+            const banner = document.getElementById('toastBanner');
+            const text = document.getElementById('toastText');
+            text.textContent = message;
+            banner.classList.remove('opacity-0', 'translate-y-4');
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => {
+                banner.classList.add('opacity-0', 'translate-y-4');
+            }, 2400);
+        }
+
+        // ==========================================
+        // 2. ЯДРО WEB AUDIO API И АНАЛИЗАТОР СПЕКТРА
+        // ==========================================
+        let audioCtx = null;
+        let masterGain = null;
+        let analyser = null;
+
+        // Состояние генератора ультразвука
+        let ultraOsc = null;
+        let ultraGain = null;
+        let isUltraPlaying = false;
+        let currentUltraFreq = 17400;
+        let currentWaveType = 'sine';
+
+        // Состояние саундпада
+        let isLoopMode = false;
+        const activePads = new Map(); // id -> { stopFn, intervalId }
+        let stealthTimerId = null;
+        let stealthCountdown = 0;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContextClass();
+                masterGain = audioCtx.createGain();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 512;
+
+                const vol = document.getElementById('masterVolume').value / 100;
+                masterGain.gain.value = vol;
+
+                masterGain.connect(analyser);
+                analyser.connect(audioCtx.destination);
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        // Создание буфера белого шума для спецэффектов
+        function createNoiseBuffer(durationSec = 2) {
+            const bufferSize = audioCtx.sampleRate * durationSec;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        // ==========================================
+        // 3. БАЗА 12 ВСТРОЕННЫХ РАЗДРАЖАЮЩИХ ЗВУКОВ
+        // ==========================================
+        const SOUNDS_LIST = [
+            {
+                id: 'mosquito',
+                name: 'Комар у уха',
+                sub: '650-850 Гц 3D',
+                emoji: '🦟',
+                color: 'from-emerald-500/20 to-teal-500/10',
+                duration: 2600,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const lfo = ctx.createOscillator();
+                    const lfoGain = ctx.createGain();
+                    const gain = ctx.createGain();
+
+                    // Тембр крыльев комара — пилообразная волна с фильтрацией
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(620, now);
+                    osc.frequency.exponentialRampToValueAtTime(790, now + 0.8);
+                    osc.frequency.exponentialRampToValueAtTime(640, now + 1.5);
+                    osc.frequency.exponentialRampToValueAtTime(840, now + 2.2);
+                    osc.frequency.exponentialRampToValueAtTime(610, now + 2.6);
+
+                    // Вибрато полета
+                    lfo.frequency.value = 18;
+                    lfoGain.gain.value = 28;
+                    lfo.connect(lfoGain);
+                    lfoGain.connect(osc.frequency);
+
+                    // Имитация приближения к уху
+                    gain.gain.setValueAtTime(0.02, now);
+                    gain.gain.linearRampToValueAtTime(0.45, now + 0.8);
+                    gain.gain.linearRampToValueAtTime(0.12, now + 1.5);
+                    gain.gain.linearRampToValueAtTime(0.65, now + 2.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 2.6);
+
+                    const filter = ctx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 1400;
+                    filter.Q.value = 2.5;
+
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(dest);
+
+                    osc.start(now);
+                    lfo.start(now);
+                    osc.stop(now + 2.6);
+                    lfo.stop(now + 2.6);
+
+                    return () => {
+                        try { osc.stop(); lfo.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'chalk',
+                name: 'Мел по доске',
+                sub: 'Жуткий скрип',
+                emoji: '🖍️',
+                color: 'from-rose-500/20 to-pink-500/10',
+                duration: 2000,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const mod = ctx.createOscillator();
+                    const modGain = ctx.createGain();
+                    const outGain = ctx.createGain();
+
+                    osc1.type = 'sawtooth';
+                    osc2.type = 'triangle';
+                    osc1.frequency.setValueAtTime(3100, now);
+                    osc1.frequency.linearRampToValueAtTime(3950, now + 0.4);
+                    osc1.frequency.linearRampToValueAtTime(2850, now + 1.1);
+                    osc1.frequency.linearRampToValueAtTime(4200, now + 1.9);
+
+                    osc2.frequency.setValueAtTime(3145, now);
+                    osc2.frequency.linearRampToValueAtTime(4190, now + 1.9);
+
+                    mod.type = 'square';
+                    mod.frequency.value = 65;
+                    modGain.gain.value = 420;
+                    mod.connect(modGain);
+                    modGain.connect(osc1.frequency);
+
+                    const hp = ctx.createBiquadFilter();
+                    hp.type = 'highpass';
+                    hp.frequency.value = 2400;
+
+                    outGain.gain.setValueAtTime(0.01, now);
+                    outGain.gain.linearRampToValueAtTime(0.5, now + 0.1);
+                    outGain.gain.setValueAtTime(0.45, now + 1.7);
+                    outGain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+
+                    osc1.connect(hp);
+                    osc2.connect(hp);
+                    hp.connect(outGain);
+                    outGain.connect(dest);
+
+                    osc1.start(now);
+                    osc2.start(now);
+                    mod.start(now);
+                    osc1.stop(now + 2.0);
+                    osc2.stop(now + 2.0);
+                    mod.stop(now + 2.0);
+
+                    return () => {
+                        try { osc1.stop(); osc2.stop(); mod.stop(); outGain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'dentist',
+                name: 'Бормашина',
+                sub: 'Стоматолог',
+                emoji: '🦷',
+                color: 'from-cyan-500/20 to-blue-500/10',
+                duration: 2400,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const sub = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    osc.type = 'sawtooth';
+                    sub.type = 'sine';
+
+                    // Высокооборотная турбина бормашины с просадкой оборотов при "сверлении"
+                    osc.frequency.setValueAtTime(4200, now);
+                    osc.frequency.exponentialRampToValueAtTime(6400, now + 0.35);
+                    osc.frequency.setValueAtTime(5100, now + 0.7);
+                    osc.frequency.linearRampToValueAtTime(4600, now + 1.3);
+                    osc.frequency.exponentialRampToValueAtTime(6600, now + 1.9);
+                    osc.frequency.exponentialRampToValueAtTime(3000, now + 2.4);
+
+                    sub.frequency.setValueAtTime(2100, now);
+                    sub.frequency.exponentialRampToValueAtTime(3200, now + 1.9);
+
+                    gain.gain.setValueAtTime(0.01, now);
+                    gain.gain.linearRampToValueAtTime(0.45, now + 0.25);
+                    gain.gain.setValueAtTime(0.5, now + 2.0);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 2.4);
+
+                    osc.connect(gain);
+                    sub.connect(gain);
+                    gain.connect(dest);
+
+                    osc.start(now);
+                    sub.start(now);
+                    osc.stop(now + 2.4);
+                    sub.stop(now + 2.4);
+
+                    return () => {
+                        try { osc.stop(); sub.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'drill',
+                name: 'Перфоратор',
+                sub: 'Сосед в 7 утра',
+                emoji: '🔨',
+                color: 'from-amber-500/20 to-orange-500/10',
+                duration: 2200,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const pulseLfo = ctx.createOscillator();
+                    const pulseGain = ctx.createGain();
+                    const outGain = ctx.createGain();
+
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(115, now);
+                    osc.frequency.linearRampToValueAtTime(98, now + 2.2);
+
+                    // Ударный механизм 22 удара в секунду
+                    pulseLfo.type = 'square';
+                    pulseLfo.frequency.value = 22;
+                    pulseGain.gain.value = 0.5;
+
+                    pulseLfo.connect(pulseGain.gain);
+                    osc.connect(pulseGain);
+                    pulseGain.connect(outGain);
+
+                    outGain.gain.setValueAtTime(0.75, now);
+                    outGain.gain.setValueAtTime(0.75, now + 2.0);
+                    outGain.gain.exponentialRampToValueAtTime(0.001, now + 2.2);
+
+                    outGain.connect(dest);
+                    osc.start(now);
+                    pulseLfo.start(now);
+                    osc.stop(now + 2.2);
+                    pulseLfo.stop(now + 2.2);
+
+                    return () => {
+                        try { osc.stop(); pulseLfo.stop(); outGain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'fork',
+                name: 'Вилка по тарелке',
+                sub: 'Резкий визг',
+                emoji: '🍴',
+                color: 'from-purple-500/20 to-indigo-500/10',
+                duration: 1500,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const carrier = ctx.createOscillator();
+                    const mod = ctx.createOscillator();
+                    const modGain = ctx.createGain();
+                    const gain = ctx.createGain();
+
+                    carrier.type = 'sine';
+                    carrier.frequency.setValueAtTime(4400, now);
+                    carrier.frequency.exponentialRampToValueAtTime(5800, now + 0.5);
+                    carrier.frequency.exponentialRampToValueAtTime(4900, now + 1.4);
+
+                    mod.type = 'sawtooth';
+                    mod.frequency.value = 1850;
+                    modGain.gain.value = 950;
+
+                    mod.connect(modGain);
+                    modGain.connect(carrier.frequency);
+
+                    gain.gain.setValueAtTime(0.01, now);
+                    gain.gain.linearRampToValueAtTime(0.55, now + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+
+                    carrier.connect(gain);
+                    gain.connect(dest);
+
+                    carrier.start(now);
+                    mod.start(now);
+                    carrier.stop(now + 1.5);
+                    mod.stop(now + 1.5);
+
+                    return () => {
+                        try { carrier.stop(); mod.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'smoke',
+                name: 'Детектор дыма',
+                sub: 'Писк батарейки',
+                emoji: '🔋',
+                color: 'from-red-500/20 to-rose-500/10',
+                duration: 1200,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    // Тот самый сводящий с ума короткий писк на 3150 Гц
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(3150, now);
+
+                    gain.gain.setValueAtTime(0.001, now);
+                    gain.gain.linearRampToValueAtTime(0.8, now + 0.01);
+                    gain.gain.setValueAtTime(0.8, now + 0.16);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+                    // Второй контрольный писк
+                    gain.gain.setValueAtTime(0.8, now + 0.75);
+                    gain.gain.setValueAtTime(0.8, now + 0.90);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.98);
+
+                    osc.connect(gain);
+                    gain.connect(dest);
+
+                    osc.start(now);
+                    osc.stop(now + 1.1);
+
+                    return () => {
+                        try { osc.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'siren',
+                name: 'Ядерная сирена',
+                sub: 'Тревога ГО',
+                emoji: '🚨',
+                color: 'from-orange-500/20 to-red-500/10',
+                duration: 3200,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    osc1.type = 'sawtooth';
+                    osc2.type = 'sawtooth';
+
+                    osc1.frequency.setValueAtTime(380, now);
+                    osc1.frequency.exponentialRampToValueAtTime(880, now + 1.6);
+                    osc1.frequency.exponentialRampToValueAtTime(420, now + 3.2);
+
+                    osc2.frequency.setValueAtTime(386, now);
+                    osc2.frequency.exponentialRampToValueAtTime(892, now + 1.6);
+                    osc2.frequency.exponentialRampToValueAtTime(426, now + 3.2);
+
+                    gain.gain.setValueAtTime(0.01, now);
+                    gain.gain.linearRampToValueAtTime(0.55, now + 0.4);
+                    gain.gain.setValueAtTime(0.55, now + 2.8);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 3.2);
+
+                    osc1.connect(gain);
+                    osc2.connect(gain);
+                    gain.connect(dest);
+
+                    osc1.start(now);
+                    osc2.start(now);
+                    osc1.stop(now + 3.2);
+                    osc2.stop(now + 3.2);
+
+                    return () => {
+                        try { osc1.stop(); osc2.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'airhorn',
+                name: 'MLG Горн',
+                sub: 'Фанатская дудка',
+                emoji: '📢',
+                color: 'from-yellow-500/20 to-amber-500/10',
+                duration: 1800,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const freqs = [390, 490, 587, 780];
+                    const oscs = [];
+                    const gain = ctx.createGain();
+
+                    freqs.forEach(f => {
+                        const o = ctx.createOscillator();
+                        o.type = 'sawtooth';
+                        o.frequency.setValueAtTime(f * 0.94, now);
+                        o.frequency.exponentialRampToValueAtTime(f, now + 0.06);
+                        o.connect(gain);
+                        o.start(now);
+                        o.stop(now + 1.8);
+                        oscs.push(o);
+                    });
+
+                    gain.gain.setValueAtTime(0.01, now);
+                    gain.gain.linearRampToValueAtTime(0.6, now + 0.04);
+                    gain.gain.setValueAtTime(0.55, now + 1.4);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+
+                    gain.connect(dest);
+
+                    return () => {
+                        oscs.forEach(o => { try { o.stop(); } catch (e) {} });
+                        try { gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'feedback',
+                name: 'Фон микрофона',
+                sub: 'Акустический свист',
+                emoji: '🎙️',
+                color: 'from-fuchsia-500/20 to-pink-500/10',
+                duration: 2400,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const harm = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    osc.type = 'sine';
+                    harm.type = 'triangle';
+                    osc.frequency.setValueAtTime(2650, now);
+                    osc.frequency.exponentialRampToValueAtTime(2720, now + 2.4);
+                    harm.frequency.setValueAtTime(5300, now);
+
+                    gain.gain.setValueAtTime(0.02, now);
+                    gain.gain.exponentialRampToValueAtTime(0.75, now + 0.9);
+                    gain.gain.setValueAtTime(0.75, now + 2.0);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 2.4);
+
+                    osc.connect(gain);
+                    harm.connect(gain);
+                    gain.connect(dest);
+
+                    osc.start(now);
+                    harm.start(now);
+                    osc.stop(now + 2.4);
+                    harm.stop(now + 2.4);
+
+                    return () => {
+                        try { osc.stop(); harm.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'tvstatic',
+                name: 'Сбой ТВ 1000 Гц',
+                sub: 'Писк + Белый шум',
+                emoji: '📺',
+                color: 'from-slate-400/20 to-zinc-500/10',
+                duration: 1800,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const noise = ctx.createBufferSource();
+                    noise.buffer = createNoiseBuffer(2);
+
+                    const beep = ctx.createOscillator();
+                    beep.type = 'sine';
+                    beep.frequency.value = 1000; // Классический тест-сигнал профилактики ТВ
+
+                    const gain = ctx.createGain();
+                    gain.gain.setValueAtTime(0.5, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 1.8);
+
+                    noise.connect(gain);
+                    beep.connect(gain);
+                    gain.connect(dest);
+
+                    noise.start(now);
+                    beep.start(now);
+                    noise.stop(now + 1.8);
+                    beep.stop(now + 1.8);
+
+                    return () => {
+                        try { noise.stop(); beep.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'dogwhistle',
+                name: 'Собачий свисток',
+                sub: 'Импульс 16.8 кГц',
+                emoji: '🐶',
+                color: 'from-violet-500/20 to-purple-500/10',
+                duration: 1800,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(16200, now);
+                    osc.frequency.linearRampToValueAtTime(17500, now + 0.5);
+                    osc.frequency.setValueAtTime(16400, now + 0.9);
+                    osc.frequency.linearRampToValueAtTime(18200, now + 1.7);
+
+                    gain.gain.setValueAtTime(0.8, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+
+                    osc.connect(gain);
+                    gain.connect(dest);
+
+                    osc.start(now);
+                    osc.stop(now + 1.8);
+
+                    return () => {
+                        try { osc.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            },
+            {
+                id: 'modem',
+                name: 'Модем 56k',
+                sub: 'Звуки матрицы',
+                emoji: '👾',
+                color: 'from-blue-500/20 to-cyan-500/10',
+                duration: 2400,
+                play: (ctx, dest) => {
+                    const now = ctx.currentTime;
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    osc.type = 'square';
+                    const steps = [1200, 2400, 1650, 980, 2100, 1850, 2950, 1400, 2600, 3200];
+                    steps.forEach((f, idx) => {
+                        osc.frequency.setValueAtTime(f, now + idx * 0.22);
+                    });
+
+                    gain.gain.setValueAtTime(0.45, now);
+                    gain.gain.setValueAtTime(0.45, now + 2.2);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 2.4);
+
+                    osc.connect(gain);
+                    gain.connect(dest);
+
+                    osc.start(now);
+                    osc.stop(now + 2.4);
+
+                    return () => {
+                        try { osc.stop(); gain.disconnect(); } catch (e) {}
+                    };
+                }
+            }
+        ];
+
+        // ==========================================
+        // 4. ОТРИСОВКА САУНДПАДА И ОБРАБОТКА НАЖАТИЙ
+        // ==========================================
+        function renderSoundpad() {
+            const grid = document.getElementById('soundpadGrid');
+            grid.innerHTML = '';
+
+            SOUNDS_LIST.forEach(sound => {
+                const isActive = activePads.has(sound.id);
+                const btn = document.createElement('button');
+                btn.id = `pad-${sound.id}`;
+                btn.className = `relative group rounded-2xl p-3 bg-gradient-to-br ${sound.color} bg-[#161927] border border-white/10 hover:border-pink-500/50 active:scale-95 transition-all flex flex-col items-center text-center justify-between min-h-[104px] shadow-md ${isActive ? 'pad-active' : ''}`;
+                btn.onclick = () => triggerPad(sound);
+
+                btn.innerHTML = `
+                    <div class="w-full flex justify-between items-center text-[10px] font-mono text-slate-400">
+                        <span>${isLoopMode ? '∞' : '1x'}</span>
+                        <span class="w-2 h-2 rounded-full ${isActive ? 'bg-pink-500 animate-ping' : 'bg-white/15'}"></span>
+                    </div>
+                    <div class="text-2xl my-1 transform group-active:scale-125 transition">${sound.emoji}</div>
+                    <div class="w-full">
+                        <div class="text-xs font-bold text-white leading-tight truncate">${sound.name}</div>
+                        <div class="text-[10px] text-slate-400 truncate mt-0.5">${sound.sub}</div>
+                    </div>
+                `;
+                grid.appendChild(btn);
+            });
+
+            document.getElementById('padCountBadge').textContent = `${SOUNDS_LIST.length} звуков`;
+            updateStatusCounters();
+        }
+
+        function triggerPad(sound) {
+            initAudio();
+            triggerHaptic('medium');
+
+            // Если этот звук уже играет — останавливаем его
+            if (activePads.has(sound.id)) {
+                stopPad(sound.id);
+                return;
+            }
+
+            const playOnce = () => {
+                const stopFn = sound.play(audioCtx, masterGain);
+                return stopFn;
+            };
+
+            const initialStopFn = playOnce();
+            const padState = { stopFn: initialStopFn, timerId: null };
+
+            if (isLoopMode) {
+                padState.timerId = setInterval(() => {
+                    padState.stopFn = playOnce();
+                }, sound.duration);
+            } else {
+                padState.timerId = setTimeout(() => {
+                    activePads.delete(sound.id);
+                    renderSoundpad();
+                }, sound.duration);
+            }
+
+            activePads.set(sound.id, padState);
+            document.getElementById('currentFreqBadge').textContent = sound.sub;
+            renderSoundpad();
+        }
+
+        function stopPad(id) {
+            const state = activePads.get(id);
+            if (state) {
+                if (state.stopFn) state.stopFn();
+                clearInterval(state.timerId);
+                clearTimeout(state.timerId);
+                activePads.delete(id);
+                renderSoundpad();
+            }
+        }
+
+        // ==========================================
+        // 5. УПРАВЛЕНИЕ ГЕНЕРАТОРОМ УЛЬТРАЗВУКА
+        // ==========================================
+        function toggleUltrasound() {
+            initAudio();
+            triggerHaptic('heavy');
+
+            if (isUltraPlaying) {
+                stopUltrasound();
+            } else {
+                startUltrasound();
+            }
+        }
+
+        function startUltrasound() {
+            stopUltrasound();
+            ultraOsc = audioCtx.createOscillator();
+            ultraGain = audioCtx.createGain();
+
+            ultraOsc.type = currentWaveType;
+            ultraOsc.frequency.setValueAtTime(currentUltraFreq, audioCtx.currentTime);
+
+            ultraGain.gain.setValueAtTime(0.01, audioCtx.currentTime);
+            ultraGain.gain.linearRampToValueAtTime(0.85, audioCtx.currentTime + 0.05);
+
+            ultraOsc.connect(ultraGain);
+            ultraGain.connect(masterGain);
+
+            ultraOsc.start();
+            isUltraPlaying = true;
+
+            const btn = document.getElementById('ultraToggleBtn');
+            btn.className = 'px-4 py-2 rounded-xl font-bold text-xs bg-rose-600 text-white shadow-lg shadow-rose-600/40 animate-pulse flex items-center gap-2';
+            document.getElementById('ultraBtnIcon').className = 'fa-solid fa-stop';
+            document.getElementById('ultraBtnText').textContent = 'ВЫКЛЮЧИТЬ';
+            document.getElementById('currentFreqBadge').textContent = `${currentUltraFreq} Гц`;
+
+            updateStatusCounters();
+            showToast(`Ультразвук ${currentUltraFreq} Гц включен!`);
+        }
+
+        function stopUltrasound() {
+            if (ultraOsc) {
+                try {
+                    ultraOsc.stop();
+                    ultraOsc.disconnect();
+                } catch (e) {}
+                ultraOsc = null;
+            }
+            isUltraPlaying = false;
+
+            const btn = document.getElementById('ultraToggleBtn');
+            btn.className = 'px-4 py-2 rounded-xl font-bold text-xs bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg shadow-pink-500/25 active:scale-95 transition-all flex items-center gap-2';
+            document.getElementById('ultraBtnIcon').className = 'fa-solid fa-play';
+            document.getElementById('ultraBtnText').textContent = 'ВКЛЮЧИТЬ';
+
+            updateStatusCounters();
+        }
+
+        function updateFrequencyUI(freq) {
+            currentUltraFreq = Math.max(100, Math.min(22000, Number(freq)));
+            document.getElementById('freqSlider').value = currentUltraFreq;
+            document.getElementById('freqDisplayValue').textContent = currentUltraFreq;
+
+            const descEl = document.getElementById('freqCategoryLabel');
+            if (currentUltraFreq < 2000) {
+                descEl.textContent = 'Низкий/средний тон — слышат абсолютно все';
+            } else if (currentUltraFreq < 10000) {
+                descEl.textContent = 'Резкий высокочастотный писк (тиinnitus)';
+            } else if (currentUltraFreq < 15000) {
+                descEl.textContent = 'Слышат люди младше 35–40 лет';
+            } else if (currentUltraFreq < 18500) {
+                descEl.textContent = 'Стелс-частота: слышат подростки (до 20 лет)';
+            } else {
+                descEl.textContent = 'Ультразвук (отпугиватель / животные)';
+            }
+
+            if (isUltraPlaying && ultraOsc && audioCtx) {
+                ultraOsc.frequency.setTargetAtTime(currentUltraFreq, audioCtx.currentTime, 0.015);
+                document.getElementById('currentFreqBadge').textContent = `${currentUltraFreq} Гц`;
+            }
+        }
+
+        function adjustFreq(delta) {
+            triggerHaptic('light');
+            updateFrequencyUI(currentUltraFreq + delta);
+        }
+
+        function setPresetFreq(freq, wave) {
+            initAudio();
+            triggerHaptic('medium');
+            setWaveType(wave);
+            updateFrequencyUI(freq);
+            if (!isUltraPlaying) {
+                startUltrasound();
+            }
+        }
+
+        function setWaveType(type) {
+            currentWaveType = type;
+            document.querySelectorAll('.wave-btn').forEach(btn => {
+                btn.className = 'wave-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-white/5 border border-white/10 text-slate-400';
+            });
+            const activeBtn = document.getElementById(`wave-${type}`);
+            if (activeBtn) {
+                activeBtn.className = 'wave-btn py-1.5 px-2 rounded-lg text-[11px] font-medium bg-pink-500/20 border border-pink-500 text-pink-300';
+            }
+            if (isUltraPlaying && ultraOsc) {
+                ultraOsc.type = currentWaveType;
+            }
+        }
+
+        // ==========================================
+        // 6. ЗАГРУЗКА СВОИХ АУДИОФАЙЛОВ, ЛУП И ТАЙМЕР
+        // ==========================================
+        function handleCustomFiles(event) {
+            initAudio();
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+
+            files.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const arrayBuffer = e.target.result;
+                        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                        const customId = `custom_${Date.now()}_${index}`;
+                        const cleanName = file.name.replace(/\.[^/.]+$/, '').slice(0, 14);
+
+                        SOUNDS_LIST.push({
+                            id: customId,
+                            name: cleanName || 'Свой звук',
+                            sub: `${audioBuffer.duration.toFixed(1)} сек`,
+                            emoji: '🎵',
+                            color: 'from-cyan-500/25 to-emerald-500/15',
+                            duration: Math.max(400, Math.round(audioBuffer.duration * 1000)),
+                            play: (ctx, dest) => {
+                                const source = ctx.createBufferSource();
+                                source.buffer = audioBuffer;
+                                source.connect(dest);
+                                source.start();
+                                return () => {
+                                    try { source.stop(); source.disconnect(); } catch (err) {}
+                                };
+                            }
+                        });
+
+                        renderSoundpad();
+                        showToast(`Добавлен звук: ${cleanName}`);
+                        triggerHaptic('medium');
+                    } catch (err) {
+                        showToast('Не удалось декодировать аудиофайл');
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function toggleLoopMode() {
+            triggerHaptic('light');
+            isLoopMode = !isLoopMode;
+            const btn = document.getElementById('loopModeBtn');
+            const txt = document.getElementById('loopStateText');
+
+            if (isLoopMode) {
+                btn.className = 'px-3 py-2 rounded-xl bg-cyan-500/20 border border-cyan-400 text-cyan-200 text-xs font-semibold flex items-center gap-2 transition-all';
+                txt.textContent = 'ВКЛ';
+                showToast('Режим зацикливания ВКЛЮЧЕН');
+            } else {
+                btn.className = 'px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold flex items-center gap-2 transition-all';
+                txt.textContent = 'ВЫКЛ';
+                showToast('Режим зацикливания ВЫКЛЮЧЕН');
+            }
+            renderSoundpad();
+        }
+
+        function startStealthTimer() {
+            initAudio();
+            triggerHaptic('medium');
+
+            if (stealthTimerId) {
+                clearInterval(stealthTimerId);
+                stealthTimerId = null;
+                document.getElementById('timerBtnText').textContent = 'Таймер 5с';
+                showToast('Таймер отменен');
+                return;
+            }
+
+            stealthCountdown = 5;
+            const btnText = document.getElementById('timerBtnText');
+            btnText.textContent = `Ждем ${stealthCountdown}с...`;
+            showToast('Спрячь телефон! Запуск через 5 секунд');
+
+            stealthTimerId = setInterval(() => {
+                stealthCountdown--;
+                if (stealthCountdown > 0) {
+                    btnText.textContent = `Ждем ${stealthCountdown}с...`;
+                } else {
+                    clearInterval(stealthTimerId);
+                    stealthTimerId = null;
+                    btnText.textContent = 'Таймер 5с';
+
+                    const target = document.getElementById('prankSoundSelect').value;
+                    if (target === 'ultrasound') {
+                        setPresetFreq(17400, 'sawtooth');
+                    } else {
+                        const found = SOUNDS_LIST.find(s => s.id === target);
+                        if (found) triggerPad(found);
+                    }
+                }
+            }, 1000);
+        }
+
+        function stopAllSounds() {
+            triggerHaptic('heavy');
+            stopUltrasound();
+            Array.from(activePads.keys()).forEach(id => stopPad(id));
+            if (stealthTimerId) {
+                clearInterval(stealthTimerId);
+                stealthTimerId = null;
+                document.getElementById('timerBtnText').textContent = 'Таймер 5с';
+            }
+            document.getElementById('currentFreqBadge').textContent = '0 Гц';
+            updateStatusCounters();
+            showToast('Все звуки остановлены');
+        }
+
+        function updateStatusCounters() {
+            const totalActive = activePads.size + (isUltraPlaying ? 1 : 0);
+            document.getElementById('activeVoicesBadge').textContent = `Активно: ${totalActive}`;
+            const dot = document.getElementById('liveDot');
+            const sub = document.getElementById('statusSubtitle');
+
+            if (totalActive > 0) {
+                dot.className = 'w-2 h-2 rounded-full bg-pink-500 animate-ping';
+                sub.lastElementChild.textContent = `Излучение звука (${totalActive})`;
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+                sub.lastElementChild.textContent = 'Готов к запуску';
+            }
+        }
+
+        // ==========================================
+        // 7. ОСЦИЛЛОГРАФ НА CANVAS И СОБЫТИЯ
+        // ==========================================
+        const canvas = document.getElementById('visualizerCanvas');
+        const ctx2d = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+        }
+
+        function drawVisualizer() {
+            requestAnimationFrame(drawVisualizer);
+
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx2d.clearRect(0, 0, w, h);
+
+            if (!analyser || (activePads.size === 0 && !isUltraPlaying)) {
+                // Спокойная линия в режиме ожидания
+                ctx2d.beginPath();
+                ctx2d.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+                ctx2d.lineWidth = 2;
+                ctx2d.moveTo(0, h / 2);
+                ctx2d.lineTo(w, h / 2);
+                ctx2d.stroke();
+                return;
+            }
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteTimeDomainData(dataArray);
+
+            const grad = ctx2d.createLinearGradient(0, 0, w, 0);
+            grad.addColorStop(0, '#00f2fe');
+            grad.addColorStop(0.5, '#ec4899');
+            grad.addColorStop(1, '#a855f7');
+
+            ctx2d.lineWidth = 3;
+            ctx2d.strokeStyle = grad;
+            ctx2d.beginPath();
+
+            const sliceWidth = w / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = (v * h) / 2;
+
+                if (i === 0) {
+                    ctx2d.moveTo(x, y);
+                } else {
+                    ctx2d.lineTo(x, y);
+                }
+                x += sliceWidth;
+            }
+
+            ctx2d.lineTo(w, h / 2);
+            ctx2d.stroke();
+        }
+
+        // Слушатели ползунков
+        document.getElementById('freqSlider').addEventListener('input', (e) => {
+            updateFrequencyUI(e.target.value);
+        });
+
+        document.getElementById('masterVolume').addEventListener('input', (e) => {
+            const val = Number(e.target.value);
+            document.getElementById('volumeLabel').textContent = `${val}%`;
+            if (masterGain && audioCtx) {
+                masterGain.gain.setTargetAtTime(val / 100, audioCtx.currentTime, 0.02);
+            }
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+
+        window.onload = function () {
+            resizeCanvas();
+            renderSoundpad();
+            drawVisualizer();
+        };
+    </script>
+</body>
+</html>
